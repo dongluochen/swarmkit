@@ -1,6 +1,7 @@
 package controlapi
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/docker/swarmkit/api"
@@ -263,6 +264,34 @@ func TestUpdateService(t *testing.T) {
 		ServiceVersion: version,
 	})
 	assert.Error(t, err)
+}
+
+// TODO(dongluochen): Network update is not supported yet and it's blocked
+// from controlapi. This test should be removed once network update is supported.
+func TestServiceUpdateRejectNetworkChange(t *testing.T) {
+	ts := newTestServer(t)
+	spec := createSpec("name", "image", 1)
+	spec.Networks = []*api.ServiceSpec_NetworkAttachmentConfig{
+		{
+			Target: "net20",
+		},
+	}
+	cr, err := ts.Client.CreateService(context.Background(), &api.CreateServiceRequest{Spec: spec})
+	assert.NoError(t, err)
+
+	ur, err := ts.Client.GetService(context.Background(), &api.GetServiceRequest{ServiceID: cr.Service.ID})
+	assert.NoError(t, err)
+	service := ur.Service
+
+	service.Spec.Networks[0].Target = "net30"
+
+	_, err = ts.Client.UpdateService(context.Background(), &api.UpdateServiceRequest{
+		ServiceID:      service.ID,
+		Spec:           &service.Spec,
+		ServiceVersion: &service.Meta.Version,
+	})
+	assert.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), errNetworkUpdateNotSupported.Error()))
 }
 
 func TestRemoveService(t *testing.T) {
